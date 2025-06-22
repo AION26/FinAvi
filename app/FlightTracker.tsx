@@ -10,76 +10,89 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import FlightMap from "@/components/flight-map"
-import { mockFlightData, mockNearbyAirplanes } from "@/lib/mock-data"
-import { fetchFlightDataByCallsign } from "@/lib/openskyToken"
-import { getWeatherRisk } from "@/lib/getWeatherRisk"
+import { mockNearbyAirplanes } from "@/lib/mock-data"
+import { fetchFlightDataByCallsign } from "@/lib/fetchFlightData"
 import { FlightData } from "@/types/FlightData"
 
 export default function FlightTracker() {
   const [flightNumber, setFlightNumber] = useState("")
-  const [selectedFlight, setSelectedFlight] = useState(mockFlightData)
+  const [selectedFlight, setSelectedFlight] = useState<FlightData>({
+    flightNumber: "",
+    currentPosition: [0, 0],
+    origin: {
+      code: "",
+      name: "",
+      city: "",
+      country: "",
+      coordinates: [0, 0],
+    },
+    destination: {
+      code: "",
+      name: "",
+      city: "",
+      country: "",
+      coordinates: [0, 0],
+    },
+    airline: {
+      name: "",
+      code: "",
+      callsign: "",
+    },
+    altitude: 0,
+    speed: 0,
+    heading: 0,
+    aircraft: "",
+    status: "Unknown",
+    path: [],
+  })
+
   const [showNearbyAirplanes, setShowNearbyAirplanes] = useState(false)
   const [isTracking, setIsTracking] = useState(true)
   const [riskData, setRiskData] = useState({
     weatherRisk: 4,
     warZoneRisk: 2,
-    overallRisk: 3
+    overallRisk: 3,
   })
 
   const handleTrackFlight = async () => {
-    if (!flightNumber.trim()) return;
+    if (!flightNumber.trim()) return
 
-    setIsTracking(true);
+    setIsTracking(true)
 
-    const flightData = await fetchFlightDataByCallsign(flightNumber);
-    console.log("Fetched flight data:", flightData);
+    const flightData = await fetchFlightDataByCallsign(flightNumber)
+    console.log("Fetched flight data:", flightData)
 
     if (!flightData) {
-      alert("Flight not found");
-      setIsTracking(false);
-      return;
+      alert("Flight not found")
+      setIsTracking(false)
+      return
     }
 
-    const cleanFlightData = {
-      flightNumber: String(flightData.flightNumber),
-      currentPosition: flightData.currentPosition as [number, number],
-      origin: flightData.origin,
-      destination: flightData.destination,
-      altitude: Number(flightData.altitude),
-      speed: Number(flightData.speed),
-      heading: Number(flightData.heading),
-      aircraft: String(flightData.aircraft),
-      status: flightData.status,
-      path: flightData.path as [number, number][],
-    };
+    setSelectedFlight(flightData)
 
-    setSelectedFlight(cleanFlightData);
+    const weatherRisk = Math.floor(Math.random() * 10) + 1
+    const warZoneRisk = Math.floor(Math.random() * 5) + 1
+    const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2)
 
-    // Generate random risk data between 1-10 for demo purposes
-    const weatherRisk = Math.floor(Math.random() * 10) + 1;
-    const warZoneRisk = Math.floor(Math.random() * 5) + 1; // Lower range for war zone
-    const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2);
-    
     setRiskData({
       weatherRisk,
       warZoneRisk,
-      overallRisk
-    });
-  };
+      overallRisk,
+    })
+  }
 
   const updateFlightAndRisk = async (newF: FlightData) => {
-    setSelectedFlight(newF);
-    // Generate new random risk data when flight updates
-    const weatherRisk = Math.floor(Math.random() * 10) + 1;
-    const warZoneRisk = Math.floor(Math.random() * 5) + 1;
-    const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2);
-    
+    setSelectedFlight(newF)
+    const weatherRisk = Math.floor(Math.random() * 10) + 1
+    const warZoneRisk = Math.floor(Math.random() * 5) + 1
+    const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2)
+
     setRiskData({
       weatherRisk,
       warZoneRisk,
-      overallRisk
-    });
-  };
+      overallRisk,
+    })
+  }
 
   const getRiskColor = (score: number) => {
     if (score <= 3) return "text-green-600"
@@ -94,19 +107,18 @@ export default function FlightTracker() {
   }
 
   useEffect(() => {
-    let intervalId: number;
+    let intervalId: number
     if (isTracking && selectedFlight.flightNumber) {
       intervalId = window.setInterval(async () => {
-        const newData = await fetchFlightDataByCallsign(selectedFlight.flightNumber);
-        if (newData) updateFlightAndRisk(newData);
-      }, 6000);
+        const newData = await fetchFlightDataByCallsign(selectedFlight.flightNumber)
+        if (newData) updateFlightAndRisk(newData)
+      }, 6000)
     }
-    return () => clearInterval(intervalId);
-  }, [isTracking, selectedFlight.flightNumber]);
+    return () => clearInterval(intervalId)
+  }, [isTracking, selectedFlight.flightNumber])
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -114,8 +126,6 @@ export default function FlightTracker() {
               <Plane className="h-8 w-8 text-blue-600" />
               <h1 className="text-2xl font-bold text-gray-900">FlightTracker</h1>
             </div>
-
-            {/* Search Bar */}
             <div className="flex items-center space-x-2 max-w-md w-full">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -125,7 +135,7 @@ export default function FlightTracker() {
                   value={flightNumber}
                   onChange={(e) => setFlightNumber(e.target.value)}
                   className="pl-10"
-                  onKeyPress={(e) => e.key === "Enter" && handleTrackFlight()}
+                  onKeyDown={(e) => e.key === "Enter" && handleTrackFlight()}
                 />
               </div>
               <Button onClick={handleTrackFlight} className="bg-blue-600 hover:bg-blue-700">
@@ -136,10 +146,8 @@ export default function FlightTracker() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Map Section */}
           <div className="lg:col-span-3">
             <Card className="h-[600px]">
               <CardHeader className="pb-4">
@@ -170,9 +178,7 @@ export default function FlightTracker() {
             </Card>
           </div>
 
-          {/* Flight Details Sidebar */}
           <div className="space-y-6">
-            {/* Current Flight Info */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -181,39 +187,38 @@ export default function FlightTracker() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Flight Number</span>
-                    <Badge variant="outline">{selectedFlight.flightNumber}</Badge>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Flight Number</span>
+                  <Badge variant="outline">{selectedFlight.flightNumber}</Badge>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Route</span>
-                    <span className="text-sm">
-                      {selectedFlight.origin} → {selectedFlight.destination}
-                    </span>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Route</span>
+                  <span className="text-sm">
+                    {selectedFlight.origin.code} ({selectedFlight.origin.city}) →{" "}
+                    {selectedFlight.destination.code} ({selectedFlight.destination.city})
+                  </span>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Aircraft</span>
-                    <span className="text-sm">{selectedFlight.aircraft}</span>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Airline</span>
+                  <Badge variant="outline">
+                    {selectedFlight.airline.name} ({selectedFlight.airline.callsign})
+                  </Badge>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Status</span>
-                    <Badge className="bg-green-100 text-green-800">{selectedFlight.status}</Badge>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Aircraft</span>
+                  <span className="text-sm">{selectedFlight.aircraft}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Status</span>
+                  <Badge className="bg-green-100 text-green-800">{selectedFlight.status}</Badge>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Live Metrics */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -222,27 +227,18 @@ export default function FlightTracker() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <Navigation className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium">Altitude</span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Altitude</span>
                   <span className="text-lg font-semibold">{selectedFlight.altitude.toLocaleString()} ft</span>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <Wind className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium">Speed</span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Speed</span>
                   <span className="text-lg font-semibold">{selectedFlight.speed} mph</span>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <Navigation className="h-4 w-4 text-purple-600" />
-                    <span className="text-sm font-medium">Heading</span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Heading</span>
                   <span className="text-lg font-semibold">{selectedFlight.heading}°</span>
                 </div>
               </CardContent>
@@ -250,12 +246,11 @@ export default function FlightTracker() {
           </div>
         </div>
 
-        {/* Flight Risk Score Section */}
         <div className="mt-8">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <div className="h-5 w-5 bg-gradient-to-r from-yellow-400 to-red-500 rounded-full"></div>
+                <div className="h-5 w-5 bg-gradient-to-r from-yellow-400 to-red-500 rounded-full" />
                 <span>Flight Risk Assessment</span>
               </CardTitle>
             </CardHeader>
@@ -263,7 +258,7 @@ export default function FlightTracker() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Weather Risk */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex justify-between">
                     <h3 className="font-semibold text-gray-900">Weather Risk</h3>
                     <Badge className={getRiskColor(riskData.weatherRisk)}>
                       {getRiskLevel(riskData.weatherRisk)}
@@ -271,12 +266,14 @@ export default function FlightTracker() {
                   </div>
                   <Progress value={riskData.weatherRisk * 10} className="h-2" />
                   <p className="text-sm text-gray-600">Score: {riskData.weatherRisk}/10</p>
-                  <p className="text-xs text-gray-500">Based on current weather conditions along the flight path</p>
+                  <p className="text-xs text-gray-500">
+                    Based on current weather conditions along the flight path
+                  </p>
                 </div>
 
                 {/* War Zone Risk */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex justify-between">
                     <h3 className="font-semibold text-gray-900">War Zone Risk</h3>
                     <Badge className={getRiskColor(riskData.warZoneRisk)}>
                       {getRiskLevel(riskData.warZoneRisk)}
@@ -284,12 +281,14 @@ export default function FlightTracker() {
                   </div>
                   <Progress value={riskData.warZoneRisk * 10} className="h-2" />
                   <p className="text-sm text-gray-600">Score: {riskData.warZoneRisk}/10</p>
-                  <p className="text-xs text-gray-500">Based on geopolitical situation in flight regions</p>
+                  <p className="text-xs text-gray-500">
+                    Based on geopolitical situation in flight regions
+                  </p>
                 </div>
 
                 {/* Overall Risk */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex justify-between">
                     <h3 className="font-semibold text-gray-900">Overall Risk Score</h3>
                     <Badge className={`${getRiskColor(riskData.overallRisk)} text-lg px-3 py-1`}>
                       {riskData.overallRisk}/10
