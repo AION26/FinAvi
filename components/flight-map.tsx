@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FlightData } from "@/types/FlightData"
+import L from "leaflet"
 
 interface NearbyAirplane {
   id: string
@@ -19,9 +20,38 @@ interface FlightMapProps {
 export default function FlightMap({ flight, nearbyAirplanes, isTracking }: FlightMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
-
   const airplaneMarkerRef = useRef<any>(null)
   const flightPathRef = useRef<any>(null)
+  const animationRef = useRef<number | null>(null)
+  const [userZoomed, setUserZoomed] = useState(false)
+  const lastZoomRef = useRef<number>(6) // Default zoom level
+
+  // 1. Make airplane icon larger and 2. Add fake movement animation
+  const animateAirplane = (marker: any, heading: number) => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current)
+    }
+
+    let angle = 0
+    const amplitude = 1.5 // Degrees of oscillation
+    const frequency = 0.05 // Speed of oscillation
+
+    const animate = () => {
+      angle += frequency
+      const wobble = Math.sin(angle) * amplitude
+      const iconHtml = `<div style="transform: rotate(${heading + wobble}deg); color: #2563eb; font-size: 28px;">✈️</div>`
+      const newIcon = L.divIcon({
+        html: iconHtml,
+        className: "custom-airplane-icon",
+        iconSize: [36, 36], // Larger icon size
+        iconAnchor: [18, 18],
+      })
+      marker.setIcon(newIcon)
+      animationRef.current = requestAnimationFrame(animate)
+    }
+
+    animate()
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -37,7 +67,13 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
       })
 
       if (mapRef.current && !mapInstanceRef.current) {
-        mapInstanceRef.current = L.map(mapRef.current).setView(flight.currentPosition, 6)
+        mapInstanceRef.current = L.map(mapRef.current).setView(flight.currentPosition, lastZoomRef.current)
+
+        // Track zoom events
+        mapInstanceRef.current.on('zoomend', () => {
+          lastZoomRef.current = mapInstanceRef.current.getZoom()
+          setUserZoomed(true)
+        })
 
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: "© OpenStreetMap contributors",
@@ -80,12 +116,12 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
             </div>
           `)
 
-        // Custom ✈️ icon
+        // Custom airplane icon (larger size)
         const airplaneIcon = L.divIcon({
-          html: `<div style="transform: rotate(${flight.heading}deg); color: #2563eb; font-size: 20px;">✈️</div>`,
+          html: `<div style="transform: rotate(${flight.heading}deg); color: #2563eb; font-size: 28px;">✈️</div>`,
           className: "custom-airplane-icon",
-          iconSize: [30, 30],
-          iconAnchor: [15, 15],
+          iconSize: [36, 36], // Larger icon size
+          iconAnchor: [18, 18],
         })
 
         // Current flight position marker
@@ -102,15 +138,21 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
           `)
 
         airplaneMarkerRef.current = currentMarker
+        animateAirplane(currentMarker, flight.heading)
 
-        // Fit to bounds
-        mapInstanceRef.current.fitBounds(pathLine.getBounds(), { padding: [20, 20] })
+        // Fit to bounds only if user hasn't zoomed
+        if (!userZoomed) {
+          mapInstanceRef.current.fitBounds(pathLine.getBounds(), { padding: [20, 20] })
+        }
       }
     }
 
     initMap()
 
     return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current)
+      }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
@@ -165,22 +207,19 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
     const { currentPosition, heading } = flight
     airplaneMarkerRef.current.setLatLng(currentPosition)
 
-    const iconHtml = `<div style="transform: rotate(${heading}deg); color: #2563eb; font-size: 20px;">✈️</div>`
-    const newIcon = L.divIcon({
-      html: iconHtml,
-      className: "custom-airplane-icon",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-    })
-    airplaneMarkerRef.current.setIcon(newIcon)
+    // Update animation with new heading
+    animateAirplane(airplaneMarkerRef.current, heading)
 
-    mapInstanceRef.current.whenReady(() => {
-      mapInstanceRef.current?.panTo(currentPosition, {
-        animate: true,
-        duration: 1,
-        easeLinearity: 0.25,
+    // Only auto-pan if user hasn't manually zoomed
+    if (!userZoomed) {
+      mapInstanceRef.current.whenReady(() => {
+        mapInstanceRef.current?.panTo(currentPosition, {
+          animate: true,
+          duration: 1,
+          easeLinearity: 0.25,
+        })
       })
-    })
+    }
 
     // Extend flight path dynamically
     if (flightPathRef.current) {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Search, Plane, MapPin, Gauge, Navigation, Wind } from "lucide-react"
+import { Search, Plane, MapPin, Gauge } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -69,7 +69,10 @@ export default function FlightTracker() {
     }
 
     setSelectedFlight(flightData)
+    updateRiskScores()
+  }
 
+  const updateRiskScores = () => {
     const weatherRisk = Math.floor(Math.random() * 10) + 1
     const warZoneRisk = Math.floor(Math.random() * 5) + 1
     const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2)
@@ -82,16 +85,49 @@ export default function FlightTracker() {
   }
 
   const updateFlightAndRisk = async (newF: FlightData) => {
-    setSelectedFlight(newF)
-    const weatherRisk = Math.floor(Math.random() * 10) + 1
-    const warZoneRisk = Math.floor(Math.random() * 5) + 1
-    const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2)
-
-    setRiskData({
-      weatherRisk,
-      warZoneRisk,
-      overallRisk,
+    setSelectedFlight({
+      ...newF,
+      path: [
+        ...selectedFlight.path.slice(-49),
+        [newF.currentPosition[1], newF.currentPosition[0]],
+      ],
     })
+    updateRiskScores()
+  }
+
+  const moveFlight = (flight: FlightData): FlightData => {
+    const [lat, lon] = flight.currentPosition
+    const speedMps = (flight.speed * 1609.34) / 3600 // Convert mph to m/s
+    const moveDistance = speedMps * 6 // in meters over 6 seconds
+    const R = 6371e3 // Earth radius in meters
+
+    const delta = moveDistance / R
+    const headingRad = (flight.heading * Math.PI) / 180
+    const latRad = (lat * Math.PI) / 180
+    const lonRad = (lon * Math.PI) / 180
+
+    const newLat = Math.asin(
+      Math.sin(latRad) * Math.cos(delta) +
+        Math.cos(latRad) * Math.sin(delta) * Math.cos(headingRad)
+    )
+    const newLon =
+      lonRad +
+      Math.atan2(
+        Math.sin(headingRad) * Math.sin(delta) * Math.cos(latRad),
+        Math.cos(delta) - Math.sin(latRad) * Math.sin(newLat)
+      )
+
+    const finalLat = (newLat * 180) / Math.PI
+    const finalLon = (newLon * 180) / Math.PI
+
+    return {
+      ...flight,
+      currentPosition: [finalLat, finalLon],
+      path: [
+        ...flight.path.slice(-49),
+        [finalLon, finalLat],
+      ],
+    }
   }
 
   const getRiskColor = (score: number) => {
@@ -110,8 +146,13 @@ export default function FlightTracker() {
     let intervalId: number
     if (isTracking && selectedFlight.flightNumber) {
       intervalId = window.setInterval(async () => {
-        const newData = await fetchFlightDataByCallsign(selectedFlight.flightNumber)
-        if (newData) updateFlightAndRisk(newData)
+        const liveData = await fetchFlightDataByCallsign(selectedFlight.flightNumber)
+        if (liveData) {
+          updateFlightAndRisk(liveData)
+        } else {
+          // Simulate movement if no new data
+          setSelectedFlight((prev) => moveFlight(prev))
+        }
       }, 6000)
     }
     return () => clearInterval(intervalId)
