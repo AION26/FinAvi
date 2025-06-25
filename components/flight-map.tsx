@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { FlightData } from "@/types/FlightData"
 import conflict_data from "@/public/conflict_data.json"
+import { weathercodeToDescription } from "@/lib/weather"
+
 import L from "leaflet"
 
 interface NearbyAirplane {
@@ -207,6 +209,36 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
       }
     }
   }, [animateAirplane, userZoomed, initializeConflictZones, flight])
+
+  useEffect(() => {
+  const fetchWeatherAndUpdatePopup = async () => {
+    const [lat, lon] = flight.currentPosition
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover,weathercode`
+
+    const res = await fetch(weatherUrl)
+    const data = await res.json()
+    const weather = data.current
+
+    if (!weather || !airplaneMarkerRef.current) return
+
+    const popupHtml = `
+      <div class="text-sm max-w-xs">
+        <strong>🌤 Weather Conditions</strong><br/>
+        Temp: ${weather.temperature_2m}°C<br/>
+        Wind: ${weather.wind_speed_10m} km/h (${weather.wind_direction_10m}°)<br/>
+        Cloud Cover: ${weather.cloud_cover}%<br/>
+        Condition: ${weathercodeToDescription(weather.weathercode)}
+      </div>
+    `
+
+    airplaneMarkerRef.current.bindPopup(popupHtml).openPopup()
+  }
+
+  if (isTracking && flight.currentPosition) {
+    fetchWeatherAndUpdatePopup()
+  }
+}, [flight.currentPosition, isTracking])
+
 
   // Update flight position without refreshing the entire map
   useEffect(() => {

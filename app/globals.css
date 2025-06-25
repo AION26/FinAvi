@@ -90,3 +90,17 @@
   width: 100%;
   border-radius: 0.5rem;
 }
+.wind-arrow-icon {
+  color: #3b82f6;
+  font-weight: bold;
+}
+/* Custom progress indicator colors */
+.progress-indicator-low {
+  background-color: #10B981; /* green-500 */
+}
+.progress-indicator-medium {
+  background-color: #F59E0B; /* yellow-500 */
+}
+.progress-indicator-high {
+  background-color: #EF4444; /* red-500 */
+}
