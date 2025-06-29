@@ -104,3 +104,30 @@
 .progress-indicator-high {
   background-color: #EF4444; /* red-500 */
 }
+/* Conflict zone clustering styles */
+.custom-cluster {
+  background-clip: padding-box;
+}
+
+.conflict-marker {
+  background-clip: padding-box;
+}
+
+/* Popup styling for conflict zones */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.leaflet-popup-content {
+  margin: 8px;
+}
+
+/* Airplane icon animation */
+.custom-airplane-icon {
+  transition: transform 0.1s ease-out;
+}
+
+/* Nearby airplane markers */
+.custom-nearby-icon {
+  opacity: 0.8;
+}

@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { FlightData } from "@/types/FlightData"
-import conflict_data from "@/public/conflict_data.json"
+import conflict_data from "@/public/newdata25.json"
 import { weathercodeToDescription } from "@/lib/weather"
-
 import L from "leaflet"
+import "leaflet.markercluster/dist/leaflet.markercluster"
+import "leaflet.markercluster/dist/MarkerCluster.css"
+import "leaflet.markercluster/dist/MarkerCluster.Default.css"
+import "leaflet.geodesic"
 
 interface NearbyAirplane {
   id: string
@@ -33,18 +36,16 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const airplaneMarkerRef = useRef<L.Marker | null>(null)
-  const flightPathRef = useRef<L.Polyline | null>(null)
-  const conflictMarkersRef = useRef<L.CircleMarker[]>([])
+  const flightPathRef = useRef<any>(null)
   const nearbyMarkersRef = useRef<L.Marker[]>([])
   const animationRef = useRef<number | null>(null)
   const [userZoomed, setUserZoomed] = useState(false)
   const lastZoomRef = useRef<number>(6)
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null)
+  const visibleConflictRef = useRef<ConflictZone[]>([])
 
-  // Memoized animate function
   const animateAirplane = useCallback((marker: L.Marker, heading: number) => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-    }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
 
     let angle = 0
     const amplitude = 1.5
@@ -67,29 +68,55 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
     animate()
   }, [])
 
-  // Initialize conflict zones
   const initializeConflictZones = useCallback(() => {
     if (!mapInstanceRef.current) return
+    if (clusterGroupRef.current) clusterGroupRef.current.clearLayers()
 
-    // Clear existing conflict markers
-    conflictMarkersRef.current.forEach(marker => {
-      mapInstanceRef.current?.removeLayer(marker)
+    const markers = L.markerClusterGroup({
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      maxClusterRadius: 60,
+      chunkedLoading: true,
+      chunkInterval: 200,
+      iconCreateFunction: cluster => {
+        const count = cluster.getChildCount()
+        return L.divIcon({
+          html: `<div style="
+            width: 40px;
+            height: 40px;
+            background-color: rgba(220, 38, 38, 0.7);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            border: 2px solid rgba(153, 27, 27, 0.8);
+          ">${count}</div>`,
+          className: "custom-cluster",
+          iconSize: [40, 40]
+        })
+      }
     })
-    conflictMarkersRef.current = []
 
-    // Use data from conflict_data.json
     const conflictData: ConflictZone[] = conflict_data as ConflictZone[]
+    visibleConflictRef.current = conflictData
 
-    // Add conflict markers as red dots
     conflictData.forEach(conflict => {
-      const marker = L.circleMarker(conflict.position, {
-        radius: 6,
-        fillColor: "#dc2626",
-        color: "#991b1b",
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.8
-      }).addTo(mapInstanceRef.current!)
+      const marker = L.marker(conflict.position, {
+        icon: L.divIcon({
+          html: `<div style="
+            width: 12px;
+            height: 12px;
+            background-color: #dc2626;
+            border-radius: 50%;
+            border: 1px solid #991b1b;
+          "></div>`,
+          className: "conflict-marker",
+          iconSize: [12, 12]
+        })
+      })
 
       const popupContent = `
         <div class="p-2 text-sm max-w-xs">
@@ -100,13 +127,23 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
           <strong>Notes:</strong> ${conflict.notes}
         </div>
       `
-
       marker.bindPopup(popupContent)
-      conflictMarkersRef.current.push(marker)
+      markers.addLayer(marker)
     })
+
+    mapInstanceRef.current.addLayer(markers)
+    clusterGroupRef.current = markers
+    mapInstanceRef.current.on('moveend', updateVisibleConflicts)
   }, [])
 
-  // Initialize map
+  const updateVisibleConflicts = useCallback(() => {
+    if (!mapInstanceRef.current || !clusterGroupRef.current) return
+    const zoom = mapInstanceRef.current.getZoom()
+    const options = clusterGroupRef.current.options as L.MarkerClusterGroupOptions
+    options.maxClusterRadius = zoom > 8 ? 40 : 80
+    clusterGroupRef.current.refreshClusters()
+  }, [])
+
   useEffect(() => {
     if (typeof window === "undefined" || !mapRef.current || mapInstanceRef.current) return
 
@@ -120,35 +157,32 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
 
       mapInstanceRef.current = L.map(mapRef.current!).setView(flight.currentPosition, lastZoomRef.current)
 
-      // Add base tile layer
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
       }).addTo(mapInstanceRef.current)
 
-      // Track zoom events
       mapInstanceRef.current.on('zoomend', () => {
         lastZoomRef.current = mapInstanceRef.current!.getZoom()
         setUserZoomed(true)
+        updateVisibleConflicts()
       })
 
-      // Initialize conflict zones
       initializeConflictZones()
 
-      // Create initial flight path
       const fullPath: L.LatLngExpression[] = [
         flight.origin.coordinates,
         flight.currentPosition,
         flight.destination.coordinates,
       ]
 
-      flightPathRef.current = L.polyline(fullPath, {
-        color: "#2563eb",
+      flightPathRef.current = (L as any).geodesic([fullPath], {
         weight: 3,
-        opacity: 0.7,
+        opacity: 0.8,
+        color: "#2563eb",
+        steps: 50,
         dashArray: "10, 5",
       }).addTo(mapInstanceRef.current)
 
-      // Origin marker
       L.marker(flight.origin.coordinates)
         .addTo(mapInstanceRef.current)
         .bindPopup(`
@@ -159,7 +193,6 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
           </div>
         `)
 
-      // Destination marker
       L.marker(flight.destination.coordinates)
         .addTo(mapInstanceRef.current)
         .bindPopup(`
@@ -170,7 +203,6 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
           </div>
         `)
 
-      // Current flight position marker
       const airplaneIcon = L.divIcon({
         html: `<div style="transform: rotate(${flight.heading}deg); color: #2563eb; font-size: 28px;">✈️</div>`,
         className: "custom-airplane-icon",
@@ -200,104 +232,14 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
     initMap()
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
       if (mapInstanceRef.current) {
+        mapInstanceRef.current.off('moveend', updateVisibleConflicts)
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
       }
     }
-  }, [animateAirplane, userZoomed, initializeConflictZones, flight])
-
-  useEffect(() => {
-  const fetchWeatherAndUpdatePopup = async () => {
-    const [lat, lon] = flight.currentPosition
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover,weathercode`
-
-    const res = await fetch(weatherUrl)
-    const data = await res.json()
-    const weather = data.current
-
-    if (!weather || !airplaneMarkerRef.current) return
-
-    const popupHtml = `
-      <div class="text-sm max-w-xs">
-        <strong>🌤 Weather Conditions</strong><br/>
-        Temp: ${weather.temperature_2m}°C<br/>
-        Wind: ${weather.wind_speed_10m} km/h (${weather.wind_direction_10m}°)<br/>
-        Cloud Cover: ${weather.cloud_cover}%<br/>
-        Condition: ${weathercodeToDescription(weather.weathercode)}
-      </div>
-    `
-
-    airplaneMarkerRef.current.bindPopup(popupHtml).openPopup()
-  }
-
-  if (isTracking && flight.currentPosition) {
-    fetchWeatherAndUpdatePopup()
-  }
-}, [flight.currentPosition, isTracking])
-
-
-  // Update flight position without refreshing the entire map
-  useEffect(() => {
-    if (!airplaneMarkerRef.current || !flightPathRef.current || !mapInstanceRef.current) return
-
-    // Update airplane position
-    airplaneMarkerRef.current.setLatLng(flight.currentPosition)
-    
-    // Update flight path
-    const newPath = [
-      flight.origin.coordinates,
-      flight.currentPosition,
-      flight.destination.coordinates
-    ]
-    flightPathRef.current.setLatLngs(newPath)
-
-    // Update airplane animation with new heading
-    animateAirplane(airplaneMarkerRef.current, flight.heading)
-
-    // Auto-center if tracking is enabled and user hasn't manually zoomed
-    if (isTracking && !userZoomed) {
-      mapInstanceRef.current.setView(flight.currentPosition, lastZoomRef.current)
-    }
-  }, [flight.currentPosition, flight.heading, isTracking, userZoomed, animateAirplane])
-
-  // Update nearby airplanes
-  useEffect(() => {
-    if (!mapInstanceRef.current) return
-
-    // Clear existing nearby markers
-    nearbyMarkersRef.current.forEach(marker => {
-      mapInstanceRef.current?.removeLayer(marker)
-    })
-    nearbyMarkersRef.current = []
-
-    // Add new nearby airplane markers
-    nearbyAirplanes.forEach(airplane => {
-      const nearbyIcon = L.divIcon({
-        html: `<div style="color: #059669; font-size: 24px;">✈️</div>`,
-        className: "custom-nearby-icon",
-        iconSize: [30, 30],
-        iconAnchor: [15, 15],
-      })
-
-      const marker = L.marker(airplane.position, { icon: nearbyIcon })
-        .addTo(mapInstanceRef.current!)
-        .bindPopup(`
-          <div class="p-2 text-sm">
-            <h3 class="font-bold">${airplane.flightNumber}</h3>
-            <p><strong>Altitude:</strong> ${airplane.altitude.toLocaleString()} ft</p>
-            <p><strong>Distance:</strong> ${Math.round(
-              mapInstanceRef.current!.distance(flight.currentPosition, airplane.position) / 1000
-            )} km</p>
-          </div>
-        `)
-
-      nearbyMarkersRef.current.push(marker)
-    })
-  }, [nearbyAirplanes, flight.currentPosition])
+  }, [animateAirplane, userZoomed, initializeConflictZones, flight, updateVisibleConflicts])
 
   return (
     <div className="relative w-full h-full">
@@ -320,4 +262,4 @@ export default function FlightMap({ flight, nearbyAirplanes, isTracking }: Fligh
       </div>
     </div>
   )
-} 
+}

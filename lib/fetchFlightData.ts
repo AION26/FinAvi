@@ -1,21 +1,21 @@
 interface FlightData {
   flightNumber: string;
   currentPosition: [number, number];
-  origin: {
+  origin?: {
     code: string;
     name: string;
     city: string;
     country: string;
     coordinates: [number, number];
   };
-  destination: {
+  destination?: {
     code: string;
     name: string;
     city: string;
     country: string;
     coordinates: [number, number];
   };
-  airline: {
+  airline?: {
     name: string;
     code: string;
     callsign: string;
@@ -49,11 +49,23 @@ export async function fetchFlightDataByCallsign(
   }
 
   try {
-    // Fetch route info from ADSBDB
-    const routeResponse = await fetchRouteInfo(normalizedFlightNumber);
+    let routeResponse: any = null;
+    let liveResponse: any = null;
     
-    // Fetch live data from ADSB.lol
-    const liveResponse = await fetchLiveData(normalizedFlightNumber, retryCount);
+    // Try to get live data first since it's more critical
+    try {
+      liveResponse = await fetchLiveData(normalizedFlightNumber, retryCount);
+    } catch (liveError) {
+      console.error(`Failed to fetch live data for ${normalizedFlightNumber}:`, liveError);
+      return null;
+    }
+    
+    // Try to get route info, but don't fail if it doesn't work
+    try {
+      routeResponse = await fetchRouteInfo(normalizedFlightNumber);
+    } catch (routeError) {
+      console.warn(`Failed to fetch route info for ${normalizedFlightNumber}, proceeding with live data only`);
+    }
     
     // Merge responses
     const result = transformResponses(routeResponse, liveResponse, normalizedFlightNumber);
@@ -105,12 +117,6 @@ function transformResponses(
   liveData: any,
   callsign: string
 ): FlightData | null {
-  const route = routeData?.response?.flightroute;
-  if (!route || !route.origin || !route.destination || !route.airline) {
-    console.warn(`Incomplete route data for ${callsign}`);
-    return null;
-  }
-
   const aircraftList = Array.isArray(liveData?.ac) ? liveData.ac : [];
   if (aircraftList.length === 0) {
     console.warn(`No live aircraft data found for ${callsign}`);
@@ -126,33 +132,49 @@ function transformResponses(
     return null;
   }
 
-  return {
+  // Basic flight data that we can always get from live data
+  const result: FlightData = {
     flightNumber: callsign,
     currentPosition: [lat, lon],
-    origin: {
-      code: route.origin.iata_code,
-      name: route.origin.name,
-      city: route.origin.municipality,
-      country: route.origin.country_name,
-      coordinates: [route.origin.latitude, route.origin.longitude]
-    },
-    destination: {
-      code: route.destination.iata_code,
-      name: route.destination.name,
-      city: route.destination.municipality,
-      country: route.destination.country_name,
-      coordinates: [route.destination.latitude, route.destination.longitude]
-    },
-    airline: {
-      name: route.airline.name,
-      code: route.airline.iata,
-      callsign: route.airline.callsign
-    },
     altitude: flight.alt_baro ?? 0,
     speed: flight.gs ?? 0,
     heading: flight.track ?? 0,
     aircraft: flight.t ?? 'Unknown',
     status: flight.hex ? 'En Route' : 'Unknown',
-    path: [[lon, lat]] // You can expand this to use historical track if available
+    path: [[lon, lat]]
   };
+
+  // Add route info if available
+  const route = routeData?.response?.flightroute;
+  if (route) {
+    if (route.origin) {
+      result.origin = {
+        code: route.origin.iata_code,
+        name: route.origin.name,
+        city: route.origin.municipality,
+        country: route.origin.country_name,
+        coordinates: [route.origin.latitude, route.origin.longitude]
+      };
+    }
+    
+    if (route.destination) {
+      result.destination = {
+        code: route.destination.iata_code,
+        name: route.destination.name,
+        city: route.destination.municipality,
+        country: route.destination.country_name,
+        coordinates: [route.destination.latitude, route.destination.longitude]
+      };
+    }
+    
+    if (route.airline) {
+      result.airline = {
+        name: route.airline.name,
+        code: route.airline.iata,
+        callsign: route.airline.callsign
+      };
+    }
+  }
+
+  return result;
 }
