@@ -14,6 +14,9 @@ import { mockNearbyAirplanes } from "@/lib/mock-data"
 import { fetchFlightDataByCallsign } from "@/lib/fetchFlightData"
 import { FlightData } from "@/types/FlightData"
 import { getWeatherRisk } from "@/lib/getWeatherRisk"
+import { getConflictRiskForAirports } from "@/lib/flightutils";
+import { getOverallFlightRisk, getConflictRiskAtCurrentPosition } from "@/lib/flightutils";
+
 
 interface WeatherData {
   temperature: number;
@@ -122,44 +125,68 @@ export default function FlightTracker() {
     }
   }
 
-  const updateRiskScores = async (position: [number, number]) => {
-    const [lat, lon] = position
+  const updateRiskScores = async (
+  position: [number, number],
+  origin: [number, number],
+  destination: [number, number]
+) => {
+  const [lat, lon] = position;
 
-    try {
-      const weatherData = await getWeatherRisk(lat, lon)
-      const weatherRisk = weatherData.score
-      const warZoneRisk = Math.floor(Math.random() * 5) + 1
-      const overallRisk = Math.round((weatherRisk + warZoneRisk) / 2)
+  try {
+    const weatherData = await getWeatherRisk(lat, lon);
+    const weatherRisk = weatherData.score;
 
-      setRiskData({
-        weatherRisk,
-        warZoneRisk,
-        overallRisk,
-      })
+    const {
+      overallRiskScore,
+      airportRisk,
+      pathRisk,
+      currentRisk
+    } = await getOverallFlightRisk(origin, destination, position);
 
-      setWeather({
-        temperature: weatherData.temperature,
-        condition: weatherData.condition,
-        windSpeed: weatherData.windSpeed,
-        humidity: weatherData.humidity || 0,
-      })
-    } catch (error) {
-      console.error("Error fetching weather risk:", error)
-    }
+    const { nearbyConflicts } = await getConflictRiskAtCurrentPosition(position);
+
+    const nearestConflict =
+      nearbyConflicts.length > 0
+        ? nearbyConflicts.sort(
+            (a, b) =>
+              haversineDistance(position, a.position) -
+              haversineDistance(position, b.position)
+          )[0]
+        : null;
+
+    console.log("Nearest Conflict Zone:", nearestConflict);
+
+    setRiskData({
+      weatherRisk,
+      warZoneRisk: Math.round((airportRisk + pathRisk + (currentRisk ?? 0)) / 3),
+      overallRisk: Math.round((weatherRisk + overallRiskScore) / 2),
+      nearestConflict // NEW: Store this if you want to display it
+    });
+
+    setWeather({
+      temperature: weatherData.temperature,
+      condition: weatherData.condition,
+      windSpeed: weatherData.windSpeed,
+      humidity: weatherData.humidity || 0
+    });
+  } catch (error) {
+    console.error("Error updating risk scores:", error);
   }
+};
 
   const updateFlightAndRisk = async (newFlight: FlightData) => {
-    if (!selectedFlight) return
-    
-    setSelectedFlight({
-      ...newFlight,
-      path: [
-        ...selectedFlight.path,
-        newFlight.currentPosition
-      ],
-    })
-    await updateRiskScores(newFlight.currentPosition)
-  }
+  setSelectedFlight(prev => ({
+    ...newFlight,
+    path: [...(prev?.path || []), newFlight.currentPosition],
+  }));
+
+  await updateRiskScores(
+    newFlight.currentPosition,
+    newFlight.origin.coordinates,
+    newFlight.destination.coordinates
+  );
+};
+
 
   const moveFlight = (flight: FlightData): FlightData => {
     const [lat, lon] = flight.currentPosition
@@ -204,11 +231,23 @@ export default function FlightTracker() {
         try {
           const liveData = await fetchFlightDataByCallsign(selectedFlight.flightNumber)
           if (liveData) {
-            await updateFlightAndRisk(liveData)
-          } else {
-            // Simulate movement if no new data
-            setSelectedFlight(prev => prev ? moveFlight(prev) : null)
-          }
+  await updateFlightAndRisk(liveData)
+} else {
+  setSelectedFlight(prev => {
+    if (!prev) return null;
+
+    const moved = moveFlight(prev);
+
+    // Call risk update after simulating movement
+    updateRiskScores(
+      moved.currentPosition,
+      moved.origin.coordinates,
+      moved.destination.coordinates
+    );
+
+    return moved;
+  });
+}
         } catch (error) {
           console.error("Error updating flight data:", error)
         }
@@ -480,6 +519,12 @@ export default function FlightTracker() {
                 </Card>
               </div>
             </section>
+            {riskData.nearestConflict && (
+  <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-500 text-sm text-yellow-800">
+    ⚠️ Nearest Conflict Zone: <strong>{riskData.nearestConflict.location}</strong><br />
+    <span className="text-xs italic">Type: {riskData.nearestConflict.type} • Notes: {riskData.nearestConflict.notes}</span>
+  </div>
+)}
 
             {/* Recent Flights Section */}
             {recentFlights.length > 0 && (
