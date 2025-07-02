@@ -9,7 +9,6 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "FlightTracker - Real-time Flight Tracking",
   description: "Track flights in real-time with comprehensive risk assessment",
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({

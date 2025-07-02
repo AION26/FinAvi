@@ -49,7 +49,7 @@ const bearing = ([lat1, lon1]: [number, number], [lat2, lon2]: [number, number])
 };
 
 async function fetchConflicts(): Promise<Conflict[]> {
-  const res = await fetch("/conflict_data.json");
+  const res = await fetch("/newdata25.json");
   return await res.json();
 }
 

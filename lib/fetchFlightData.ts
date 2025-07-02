@@ -1,21 +1,21 @@
 interface FlightData {
   flightNumber: string;
   currentPosition: [number, number];
-  origin?: {
+  origin: {
     code: string;
     name: string;
     city: string;
     country: string;
     coordinates: [number, number];
   };
-  destination?: {
+  destination: {
     code: string;
     name: string;
     city: string;
     country: string;
     coordinates: [number, number];
   };
-  airline?: {
+  airline: {
     name: string;
     code: string;
     callsign: string;
@@ -132,10 +132,28 @@ function transformResponses(
     return null;
   }
 
-  // Basic flight data that we can always get from live data
+  // Create default airport information
+  const defaultAirport = {
+    code: 'UNKN',
+    name: 'Unknown Airport',
+    city: 'Unknown',
+    country: 'Unknown',
+    coordinates: [lat, lon] as [number, number] // Use current position as fallback
+  };
+
+  const defaultAirline = {
+    name: 'Unknown',
+    code: 'UNK',
+    callsign: 'UNKNOWN'
+  };
+
+  // Basic flight data structure with required fields
   const result: FlightData = {
     flightNumber: callsign,
     currentPosition: [lat, lon],
+    origin: defaultAirport,
+    destination: defaultAirport,
+    airline: defaultAirline,
     altitude: flight.alt_baro ?? 0,
     speed: flight.gs ?? 0,
     heading: flight.track ?? 0,
@@ -149,29 +167,35 @@ function transformResponses(
   if (route) {
     if (route.origin) {
       result.origin = {
-        code: route.origin.iata_code,
-        name: route.origin.name,
-        city: route.origin.municipality,
-        country: route.origin.country_name,
-        coordinates: [route.origin.latitude, route.origin.longitude]
+        code: route.origin.iata_code || 'UNKN',
+        name: route.origin.name || 'Unknown Airport',
+        city: route.origin.municipality || 'Unknown',
+        country: route.origin.country_name || 'Unknown',
+        coordinates: [
+          route.origin.latitude || lat,
+          route.origin.longitude || lon
+        ]
       };
     }
     
     if (route.destination) {
       result.destination = {
-        code: route.destination.iata_code,
-        name: route.destination.name,
-        city: route.destination.municipality,
-        country: route.destination.country_name,
-        coordinates: [route.destination.latitude, route.destination.longitude]
+        code: route.destination.iata_code || 'UNKN',
+        name: route.destination.name || 'Unknown Airport',
+        city: route.destination.municipality || 'Unknown',
+        country: route.destination.country_name || 'Unknown',
+        coordinates: [
+          route.destination.latitude || lat,
+          route.destination.longitude || lon
+        ]
       };
     }
     
     if (route.airline) {
       result.airline = {
-        name: route.airline.name,
-        code: route.airline.iata,
-        callsign: route.airline.callsign
+        name: route.airline.name || 'Unknown',
+        code: route.airline.iata || 'UNK',
+        callsign: route.airline.callsign || 'UNKNOWN'
       };
     }
   }

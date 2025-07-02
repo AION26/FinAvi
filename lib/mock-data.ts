@@ -1,28 +1,44 @@
 export const mockFlightData = {
   flightNumber: "AA123",
   currentPosition: [40.7128, -74.006] as [number, number], // New York
-  origin: "JFK - New York",
-  destination: "LAX - Los Angeles",
+
+  origin: {
+    code: "JFK",
+    name: "John F. Kennedy International Airport",
+    city: "New York",
+    country: "USA",
+    coordinates: [40.6413, -73.7781],
+  },
+
+  destination: {
+    code: "LAX",
+    name: "Los Angeles International Airport",
+    city: "Los Angeles",
+    country: "USA",
+    coordinates: [33.9425, -118.4081],
+  },
+
   altitude: 35000,
   speed: 550,
   heading: 245,
   aircraft: "Boeing 737-800",
   status: "En Route",
+
   path: [
-    [40.6413, -73.7781], // JFK Airport
-    [40.2, -75.0], // Philadelphia area
-    [39.1, -76.8], // Baltimore area
-    [38.9, -77.0], // Washington DC area
-    [37.5, -79.0], // Virginia
-    [36.0, -82.0], // Tennessee
-    [35.2, -85.9], // Alabama
-    [34.7, -89.5], // Mississippi
-    [32.8, -96.8], // Dallas area
-    [35.0, -101.8], // Texas Panhandle
-    [35.2, -106.6], // Albuquerque area
-    [36.1, -115.1], // Las Vegas area
-    [34.5, -117.9], // San Bernardino area
-    [33.9425, -118.4081], // LAX Airport
+    [40.6413, -73.7781],
+    [40.2, -75.0],
+    [39.1, -76.8],
+    [38.9, -77.0],
+    [37.5, -79.0],
+    [36.0, -82.0],
+    [35.2, -85.9],
+    [34.7, -89.5],
+    [32.8, -96.8],
+    [35.0, -101.8],
+    [35.2, -106.6],
+    [36.1, -115.1],
+    [34.5, -117.9],
+    [33.9425, -118.4081],
   ] as [number, number][],
 }
 
